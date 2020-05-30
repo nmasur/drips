@@ -1,7 +1,10 @@
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt;
-use rusoto_core::Region;
-use rusoto_ec2::{DescribeInstancesRequest, DescribeInstancesResult, Ec2, Ec2Client, Instance};
+use rusoto_core::{Region, RusotoError};
+use rusoto_ec2::{
+    DescribeInstancesError, DescribeInstancesRequest, DescribeInstancesResult, Ec2, Ec2Client,
+    Instance, Reservation,
+};
 
 struct InstanceMetadata {
     name: String,
@@ -43,63 +46,66 @@ async fn main() {
     }
 
     while let Some(instances) = futs.next().await {
-        for instance in instances {
-            println!(
-                "Instance: {} - {} ({})",
-                instance.name,
-                instance.ip,
-                instance.region.name()
-            );
+        match instances {
+            Ok(instances) => {
+                for instance in instances {
+                    println!(
+                        "{} - {} ({})",
+                        instance.name,
+                        instance.ip,
+                        instance.region.name()
+                    );
+                }
+            }
+            Err(error) => {
+                eprintln!("Error: {}", error);
+            }
         }
     }
-
-    // let future_instances_by_region: Vec<_> = regions
-    //     .into_iter()
-    //     .map(|region| regional_instances(region))
-    //     .collect();
-
-    // for future_instances in future_instances_by_region {
-    //     let instances = future_instances.await;
-    //     for instance in instances {
-    //         println!("Instance: {} - {}", instance.name, instance.ip);
-    //     }
-    // }
-
-    // for future_instances in future_instances_by_region {
-    //     let instances_description = future_instances.await;
-    //     let instances = regional_instances(instances_description);
-    //     for instance in instances {
-    //         println!("Instance: {} - {}", instance.name, instance.ip);
-    //     }
-    // }
-
-    // while let Some(instances) = future_instances_by_region.into_iter().next().await {
-    //     println!("{}", "Thing");
-    //     instances.map(|instance| {
-    //         println!("Instance: {} - {}", instance.name, instance.ip);
-    //     })
-    // }
-    // let instances_us_west_2 = regional_instances(Region::UsWest2);
-    // println!("{}", Region::UsWest2.name());
-    // for instance in instances_us_west_2.await {
-    //     println!("Instance: {} - {}", instance.name, instance.ip);
-    // }
 }
 
-// async fn describe_instances(region: Region) -> DescribeInstancesResult {
-//     let client = Ec2Client::new(region);
-//     let describe_instances_input: DescribeInstancesRequest = DescribeInstancesRequest {
-//         dry_run: None,
-//         filters: None,
-//         instance_ids: None,
-//         max_results: None,
-//         next_token: None,
-//     };
+fn instances_result(
+    output: Result<DescribeInstancesResult, RusotoError<DescribeInstancesError>>,
+    region: &Region,
+) -> Result<DescribeInstancesResult, String> {
+    match output {
+        Ok(result) => Ok(result),
+        Err(_) => Err(format!("Region failure in {}", &region.name())),
+    }
+}
 
-//     client.describe_instances(describe_instances_input)
-// }
+fn instances_reservations(result: DescribeInstancesResult) -> Result<Vec<Reservation>, String> {
+    match result.reservations {
+        Some(reservations) => Ok(reservations),
+        None => Err(String::from("No reservations")),
+    }
+}
 
-async fn regional_instances(region: Region) -> Vec<InstanceMetadata> {
+fn instance_name(instance: &Instance) -> Result<String, String> {
+    match &instance.tags {
+        Some(tags) => {
+            for tag in tags {
+                match &tag.key {
+                    Some(key) => {
+                        if key.as_str() == "Name" {
+                            match &tag.value {
+                                Some(value) => {
+                                    return Ok(value.clone());
+                                }
+                                None => (),
+                            }
+                        }
+                    }
+                    None => (),
+                }
+            }
+            Err(String::new())
+        }
+        None => Err(String::new()),
+    }
+}
+
+async fn regional_instances(region: Region) -> Result<Vec<InstanceMetadata>, String> {
     let client = Ec2Client::new(region.clone());
     let describe_instances_input: DescribeInstancesRequest = DescribeInstancesRequest {
         dry_run: None,
@@ -109,44 +115,18 @@ async fn regional_instances(region: Region) -> Vec<InstanceMetadata> {
         next_token: None,
     };
 
-    let output = match client.describe_instances(describe_instances_input).await {
-        Ok(output) => output,
-        Err(_) => {
-            eprintln!("{} - ERROR - Failed", &region.name());
-            // std::process::exit(1)
-            DescribeInstancesResult {
-                next_token: None,
-                reservations: None,
-            }
-        }
-    };
+    let result = instances_result(
+        client.describe_instances(describe_instances_input).await,
+        &region,
+    )?;
 
-    let reservations = match output.reservations {
-        Some(reservations) => reservations,
-        None => {
-            println!("No reservation");
-            // std::process::exit(1)
-            Vec::new()
-        }
-    };
+    let reservations = instances_reservations(result)?;
 
-    let mut total_instances: Vec<Instance> = Vec::new();
-    for reservation in reservations {
-        match reservation.instances {
-            Some(instances) => {
-                for instance in instances {
-                    total_instances.push(instance);
-                }
-            }
-            None => (),
-        }
-    }
-
-    println!(
-        "{}: total instances: {}",
-        &region.name(),
-        total_instances.len()
-    );
+    let total_instances: Vec<Instance> = reservations
+        .into_iter()
+        .filter_map(|reservation| reservation.instances)
+        .flatten()
+        .collect();
 
     let mut instance_metadatas = Vec::new();
 
@@ -156,31 +136,11 @@ async fn regional_instances(region: Region) -> Vec<InstanceMetadata> {
             None => "N/A",
         };
 
-        let name = match &instance.tags {
-            Some(tags) => {
-                let mut name_tag = String::from("N/A");
-                for tag in tags {
-                    match &tag.key {
-                        Some(key) => {
-                            if key.as_str() == "Name" {
-                                match &tag.value {
-                                    Some(value) => {
-                                        name_tag = value.clone();
-                                        break;
-                                    }
-                                    None => (),
-                                }
-                            }
-                        }
-                        None => (),
-                    }
-                }
-                name_tag
-            }
-            None => String::from("N/A"),
+        let name = match instance_name(&instance) {
+            Ok(name) => name,
+            Err(_) => String::from("N/A"),
         };
 
-        // println!("{}: {} ({})", name, ip_address, &region.name());
         instance_metadatas.push(InstanceMetadata {
             name,
             ip: String::from(ip_address),
@@ -188,5 +148,5 @@ async fn regional_instances(region: Region) -> Vec<InstanceMetadata> {
         });
     }
 
-    instance_metadatas
+    Ok(instance_metadatas)
 }
