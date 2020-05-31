@@ -17,6 +17,11 @@ struct InstanceMetadata {
     region: Region,
 }
 
+struct InstanceMetadataCollection {
+    metadatas: Vec<InstanceMetadata>,
+    profile: String,
+}
+
 #[tokio::main]
 async fn main() {
     let creds_file_lines = read_credentials_file();
@@ -62,8 +67,12 @@ async fn main() {
     }
 
     while let Some(instances_result) = futs.next().await {
-        if let Ok(instances) = instances_result {
-            for instance in instances {
+        if let Ok(instances_collection) = instances_result {
+            if instances_collection.metadatas.len() > 0 {
+                println!("\n[{}]", instances_collection.profile);
+                println!("--------------");
+            }
+            for instance in instances_collection.metadatas {
                 println!(
                     "{} - {} ({})",
                     instance.name,
@@ -100,10 +109,17 @@ fn read_credentials_file() -> std::io::Result<Vec<String>> {
     Ok(lines)
 }
 
-fn aws_creds_list(lines: Vec<String>) -> Vec<StaticProvider> {
+#[derive(Clone)]
+struct NamedStaticProvider {
+    name: String,
+    provider: StaticProvider,
+}
+
+fn aws_creds_list(lines: Vec<String>) -> Vec<NamedStaticProvider> {
     let mut key = None;
     let mut secret = None;
     let mut creds = Vec::new();
+    let mut profile = None;
     for line in lines {
         let mut words = line.split('=');
         if let Some(word) = words.next() {
@@ -114,17 +130,26 @@ fn aws_creds_list(lines: Vec<String>) -> Vec<StaticProvider> {
                 "aws_secret_access_key" => {
                     secret = Some(words.next().unwrap().trim().to_string());
                 }
-                _ => {}
+                other_word => {
+                    if other_word.starts_with("[") {
+                        profile = Some(other_word.replace("[", "").replace("]", ""));
+                    }
+                }
             }
         }
 
-        match (key.take(), secret.take()) {
-            (Some(key_value), Some(secret_value)) => {
-                creds.push(StaticProvider::new(key_value, secret_value, None, None));
+        match (key.take(), secret.take(), profile.take()) {
+            (Some(key_value), Some(secret_value), Some(profile_value)) => {
+                let provider = StaticProvider::new(key_value, secret_value, None, None);
+                creds.push(NamedStaticProvider {
+                    name: profile_value,
+                    provider,
+                });
             }
-            (taken_key, taken_secret) => {
+            (taken_key, taken_secret, taken_profile) => {
                 key = taken_key;
                 secret = taken_secret;
+                profile = taken_profile;
             }
         }
     }
@@ -174,9 +199,13 @@ fn instance_name(instance: &Instance) -> Result<String, String> {
 
 async fn regional_instances(
     region: Region,
-    credential: StaticProvider,
-) -> Result<Vec<InstanceMetadata>, String> {
-    let client = Ec2Client::new_with(HttpClient::new().unwrap(), credential, region.clone());
+    credential: NamedStaticProvider,
+) -> Result<InstanceMetadataCollection, String> {
+    let client = Ec2Client::new_with(
+        HttpClient::new().unwrap(),
+        credential.provider,
+        region.clone(),
+    );
     let describe_instances_input: DescribeInstancesRequest = DescribeInstancesRequest {
         dry_run: None,
         filters: None,
@@ -198,7 +227,10 @@ async fn regional_instances(
         .flatten()
         .collect();
 
-    let mut instance_metadatas = Vec::new();
+    let mut instance_metadatas = InstanceMetadataCollection {
+        metadatas: Vec::new(),
+        profile: credential.name,
+    };
 
     for instance in total_instances {
         let ip_address = match &instance.public_ip_address {
@@ -211,7 +243,7 @@ async fn regional_instances(
             Err(_) => String::from("N/A"),
         };
 
-        instance_metadatas.push(InstanceMetadata {
+        instance_metadatas.metadatas.push(InstanceMetadata {
             name,
             ip: String::from(ip_address),
             region: region.clone(),
