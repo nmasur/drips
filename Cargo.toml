@@ -1,5 +1,5 @@
 [package]
-name = "cloud_ips"
+name = "aws_ips"
 version = "0.1.0"
 authors = ["Noah Masur <noah.masur@take2games.com>"]
 edition = "2018"
