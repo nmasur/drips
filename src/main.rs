@@ -1,10 +1,13 @@
+use dirs_next::home_dir;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt;
-use rusoto_core::{Region, RusotoError};
+use rusoto_core::{HttpClient, Region, RusotoError};
+use rusoto_credential::StaticProvider;
 use rusoto_ec2::{
     DescribeInstancesError, DescribeInstancesRequest, DescribeInstancesResult, Ec2, Ec2Client,
     Instance, Reservation,
 };
+use std::io::BufRead;
 
 struct InstanceMetadata {
     name: String,
@@ -14,6 +17,15 @@ struct InstanceMetadata {
 
 #[tokio::main]
 async fn main() {
+    let creds_file_lines = read_credentials_file();
+    let creds = match creds_file_lines {
+        Ok(lines) => aws_creds_list(lines),
+        Err(_) => {
+            eprintln!("Error reading credentials file.");
+            std::process::exit(1);
+        }
+    };
+
     let regions = vec![
         Region::ApEast1,
         Region::ApNortheast1,
@@ -39,11 +51,17 @@ async fn main() {
         // Region::CnNorth1,
         // Region::CnNorthwest1,
     ];
+
     let mut futs = FuturesUnordered::new();
-    for region in regions {
-        // println!("Region: {}", &region.name());
-        futs.push(regional_instances(region))
+    for cred in creds {
+        for region in &regions {
+            futs.push(regional_instances(region.to_owned(), cred.clone()))
+        }
     }
+    // for region in regions {
+    //     // println!("Region: {}", &region.name());
+    //     futs.push(regional_instances(region))
+    // }
 
     while let Some(instances) = futs.next().await {
         match instances {
@@ -58,10 +76,65 @@ async fn main() {
                 }
             }
             Err(error) => {
-                eprintln!("Error: {}", error);
+                // eprintln!("Error: {}", error);
             }
         }
     }
+}
+
+fn hardcoded_profile_location() -> std::path::PathBuf {
+    match home_dir() {
+        Some(mut home_path) => {
+            home_path.push(".aws");
+            home_path.push("credentials");
+            home_path
+        }
+        // None => Err("Failed to determine home directory."),
+        None => panic!(),
+    }
+}
+
+fn read_credentials_file() -> std::io::Result<Vec<String>> {
+    let file_path = hardcoded_profile_location();
+    let file = std::fs::File::open(file_path.as_path())?;
+    let buf_reader = std::io::BufReader::new(file);
+    let lines = buf_reader
+        .lines()
+        .map(|line| line.unwrap_or(String::from("")))
+        .collect();
+    Ok(lines)
+}
+
+fn aws_creds_list(lines: Vec<String>) -> Vec<StaticProvider> {
+    let mut key = None;
+    let mut secret = None;
+    let mut creds = Vec::new();
+    for line in lines {
+        let mut words = line.split_whitespace();
+        match words.next() {
+            Some("aws_access_key_id") => {
+                words.next();
+                key = Some(words.next().unwrap().to_string());
+            }
+            Some("aws_secret_access_key") => {
+                words.next();
+                secret = Some(words.next().unwrap().to_string());
+            }
+            Some(_) => {}
+            None => {}
+        }
+
+        match (key.take(), secret.take()) {
+            (Some(key_value), Some(secret_value)) => {
+                creds.push(StaticProvider::new(key_value, secret_value, None, None));
+            }
+            (taken_key, taken_secret) => {
+                key = taken_key;
+                secret = taken_secret;
+            }
+        }
+    }
+    creds
 }
 
 fn instances_result(
@@ -105,8 +178,12 @@ fn instance_name(instance: &Instance) -> Result<String, String> {
     }
 }
 
-async fn regional_instances(region: Region) -> Result<Vec<InstanceMetadata>, String> {
-    let client = Ec2Client::new(region.clone());
+async fn regional_instances(
+    region: Region,
+    credential: StaticProvider,
+) -> Result<Vec<InstanceMetadata>, String> {
+    let client = Ec2Client::new_with(HttpClient::new().unwrap(), credential, region.clone());
+    // let client = Ec2Client::new(region.clone());
     let describe_instances_input: DescribeInstancesRequest = DescribeInstancesRequest {
         dry_run: None,
         filters: None,
