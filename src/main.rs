@@ -61,19 +61,16 @@ async fn main() {
         }
     }
 
-    while let Some(instances) = futs.next().await {
-        match instances {
-            Ok(instances) => {
-                for instance in instances {
-                    println!(
-                        "{} - {} ({})",
-                        instance.name,
-                        instance.ip,
-                        instance.region.name()
-                    );
-                }
+    while let Some(instances_result) = futs.next().await {
+        if let Ok(instances) = instances_result {
+            for instance in instances {
+                println!(
+                    "{} - {} ({})",
+                    instance.name,
+                    instance.ip,
+                    instance.region.name()
+                );
             }
-            Err(_) => { /* Ignore error with region */ }
         }
     }
 }
@@ -98,7 +95,7 @@ fn read_credentials_file() -> std::io::Result<Vec<String>> {
     let buf_reader = BufReader::new(file);
     let lines = buf_reader
         .lines()
-        .map(|line| line.unwrap_or(String::from("")))
+        .map(|line| line.unwrap_or_else(|_| String::from("")))
         .collect();
     Ok(lines)
 }
@@ -108,9 +105,9 @@ fn aws_creds_list(lines: Vec<String>) -> Vec<StaticProvider> {
     let mut secret = None;
     let mut creds = Vec::new();
     for line in lines {
-        let mut words = line.split("=");
-        match words.next() {
-            Some(word) => match word.trim() {
+        let mut words = line.split('=');
+        if let Some(word) = words.next() {
+            match word.trim() {
                 "aws_access_key_id" => {
                     key = Some(words.next().unwrap().trim().to_string());
                 }
@@ -118,8 +115,7 @@ fn aws_creds_list(lines: Vec<String>) -> Vec<StaticProvider> {
                     secret = Some(words.next().unwrap().trim().to_string());
                 }
                 _ => {}
-            },
-            None => {}
+            }
         }
 
         match (key.take(), secret.take()) {
