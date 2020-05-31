@@ -108,17 +108,17 @@ fn aws_creds_list(lines: Vec<String>) -> Vec<StaticProvider> {
     let mut secret = None;
     let mut creds = Vec::new();
     for line in lines {
-        let mut words = line.split_whitespace();
+        let mut words = line.split("=");
         match words.next() {
-            Some("aws_access_key_id") => {
-                words.next();
-                key = Some(words.next().unwrap().to_string());
-            }
-            Some("aws_secret_access_key") => {
-                words.next();
-                secret = Some(words.next().unwrap().to_string());
-            }
-            Some(_) => {}
+            Some(word) => match word.trim() {
+                "aws_access_key_id" => {
+                    key = Some(words.next().unwrap().trim().to_string());
+                }
+                "aws_secret_access_key" => {
+                    secret = Some(words.next().unwrap().trim().to_string());
+                }
+                _ => {}
+            },
             None => {}
         }
 
@@ -161,7 +161,7 @@ fn instance_name(instance: &Instance) -> Result<String, String> {
                         if key.as_str() == "Name" {
                             match &tag.value {
                                 Some(value) => {
-                                    return Ok(value.clone());
+                                    return Ok(value.to_owned());
                                 }
                                 None => (),
                             }
