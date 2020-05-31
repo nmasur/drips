@@ -7,7 +7,9 @@ use rusoto_ec2::{
     DescribeInstancesError, DescribeInstancesRequest, DescribeInstancesResult, Ec2, Ec2Client,
     Instance, Reservation,
 };
-use std::io::BufRead;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 
 struct InstanceMetadata {
     name: String,
@@ -58,10 +60,6 @@ async fn main() {
             futs.push(regional_instances(region.to_owned(), cred.clone()))
         }
     }
-    // for region in regions {
-    //     // println!("Region: {}", &region.name());
-    //     futs.push(regional_instances(region))
-    // }
 
     while let Some(instances) = futs.next().await {
         match instances {
@@ -75,29 +73,29 @@ async fn main() {
                     );
                 }
             }
-            Err(error) => {
-                // eprintln!("Error: {}", error);
-            }
+            Err(_) => { /* Ignore error with region */ }
         }
     }
 }
 
-fn hardcoded_profile_location() -> std::path::PathBuf {
+fn hardcoded_profile_location() -> PathBuf {
     match home_dir() {
         Some(mut home_path) => {
             home_path.push(".aws");
             home_path.push("credentials");
             home_path
         }
-        // None => Err("Failed to determine home directory."),
-        None => panic!(),
+        None => {
+            eprintln!("Failed to determine home directory.");
+            std::process::exit(1);
+        }
     }
 }
 
 fn read_credentials_file() -> std::io::Result<Vec<String>> {
     let file_path = hardcoded_profile_location();
-    let file = std::fs::File::open(file_path.as_path())?;
-    let buf_reader = std::io::BufReader::new(file);
+    let file = File::open(file_path.as_path())?;
+    let buf_reader = BufReader::new(file);
     let lines = buf_reader
         .lines()
         .map(|line| line.unwrap_or(String::from("")))
@@ -183,7 +181,6 @@ async fn regional_instances(
     credential: StaticProvider,
 ) -> Result<Vec<InstanceMetadata>, String> {
     let client = Ec2Client::new_with(HttpClient::new().unwrap(), credential, region.clone());
-    // let client = Ec2Client::new(region.clone());
     let describe_instances_input: DescribeInstancesRequest = DescribeInstancesRequest {
         dry_run: None,
         filters: None,
