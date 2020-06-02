@@ -1,12 +1,31 @@
-# aws_ips
+# drips: dammit, retrieve ips (from aws)
 
-Get all AWS EC2 IPs in all regions using all credentials in credentials file
+Lists all AWS EC2 public IPs in all regions using all credentials in credentials file
 
-This program will do the following:
+## What?
+
+drips does the following:
 
 - Extract all profiles from your home credentials file
+- Find the activated regions for each profile
 - Query AWS in all regions for each profile simultaneously
 - Collect EC2 instances and check for a `Name` tag and public IP
+  - Instances without a name tag are titled "N/A"
 - Return results asynchronously
 
-Sometimes the AWS API has a fit or stalls and you may need to run the program a second time.
+## Why?
+
+I just need the IPs and I have too many accounts / too lazy to login.
+
+## With?
+
+drips includes the following optional parameters:
+
+- `--profile <PROFILE NAME>`: Filter to a specific profile name
+- `--region <REGION NAME>`: Filter to a specific region name
+- `--all`: Include EC2s that don't have a public IP
+- `--raw`: Only show list values, don't label profiles/regions
+
+## Where?
+
+See [releases](https://github.com/nmasur/drips/releases) page for binaries.

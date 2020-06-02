@@ -16,6 +16,18 @@ use std::str::FromStr;
 
 // type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Clone)]
+struct NamedStaticProvider {
+    name: String,
+    provider: StaticProvider,
+}
+
+struct RegionalClient {
+    client: Ec2Client,
+    region: Region,
+    profile: String,
+}
+
 struct InstanceMetadata {
     name: String,
     ip: String,
@@ -27,14 +39,9 @@ struct InstanceMetadataCollection {
     region: Region,
 }
 
-#[derive(Clone)]
-struct NamedStaticProvider {
-    name: String,
-    provider: StaticProvider,
-}
-
 #[tokio::main]
 async fn main() {
+    // Create CLI system
     let matches = App::new("drips")
         .version("0.1.0")
         .author("Noah Masur <noah.masur@take2games.com>")
@@ -66,12 +73,6 @@ async fn main() {
                 .long("all")
                 .help("Include instances without IPs"),
         )
-        // .arg(
-        //     Arg::with_name("fast")
-        //         .short("f")
-        //         .long("fast")
-        //         .help("Quicker (but unordered) results"),
-        // )
         .get_matches();
 
     // Assign argument options
@@ -88,7 +89,7 @@ async fn main() {
         }
     };
 
-    // Request all the regions for an AWS account
+    // Request all the clients in each region for an AWS account
     let mut clients_futs = FuturesUnordered::new();
     for cred in creds {
         // Or filter based on region argument
@@ -100,6 +101,7 @@ async fn main() {
         clients_futs.push(regional_clients(cred));
     }
 
+    // Process the client results and request instance IPs
     let mut futs = FuturesOrdered::new();
     while let Some(regional_clients) = clients_futs.next().await {
         for regional_client in regional_clients {
@@ -108,16 +110,11 @@ async fn main() {
                     continue;
                 }
             }
-            futs.push(regional_instances(
-                regional_client.client,
-                regional_client.region,
-                regional_client.profile,
-                all,
-            ));
+            futs.push(regional_instances(regional_client, all));
         }
     }
 
-    // Print results
+    // Process and print results
     let mut current_profile = String::new();
     while let Some(instances_result) = futs.next().await {
         match instances_result {
@@ -125,6 +122,10 @@ async fn main() {
                 if instances_collection.metadatas.len() > 0 {
                     if instances_collection.profile != current_profile {
                         if !raw {
+                            // First line is not a new line
+                            if current_profile != "" {
+                                println!("");
+                            }
                             println!("[{}]", instances_collection.profile);
                         }
                         current_profile = instances_collection.profile;
@@ -135,9 +136,9 @@ async fn main() {
                         println!("|{}|", region);
                         println!("--------------");
                     }
-                }
-                for instance in instances_collection.metadatas {
-                    println!("{} - {}", instance.name, instance.ip,);
+                    for instance in instances_collection.metadatas {
+                        println!("{} - {}", instance.name, instance.ip,);
+                    }
                 }
             }
             Err(error) => {
@@ -254,12 +255,6 @@ fn instance_name(instance: &Instance) -> Result<String, String> {
     }
 }
 
-struct RegionalClient {
-    client: Ec2Client,
-    region: Region,
-    profile: String,
-}
-
 async fn regional_clients(credential: NamedStaticProvider) -> Vec<RegionalClient> {
     let mut ec2_regions: Vec<rusoto_ec2::Region> = Vec::new();
     {
@@ -326,9 +321,7 @@ async fn regional_clients(credential: NamedStaticProvider) -> Vec<RegionalClient
 }
 
 async fn regional_instances(
-    client: Ec2Client,
-    region: Region,
-    profile: String,
+    regional_client: RegionalClient,
     all: bool,
 ) -> Result<InstanceMetadataCollection, String> {
     let describe_instances_input: DescribeInstancesRequest = DescribeInstancesRequest {
@@ -340,8 +333,11 @@ async fn regional_instances(
     };
 
     let result = instances_result(
-        client.describe_instances(describe_instances_input).await,
-        &region,
+        regional_client
+            .client
+            .describe_instances(describe_instances_input)
+            .await,
+        &regional_client.region,
     )?;
 
     let reservations = instances_reservations(result)?;
@@ -354,8 +350,8 @@ async fn regional_instances(
 
     let mut instance_metadatas = InstanceMetadataCollection {
         metadatas: Vec::new(),
-        profile,
-        region,
+        profile: regional_client.profile,
+        region: regional_client.region,
     };
 
     for instance in total_instances {
