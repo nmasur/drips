@@ -7,6 +7,8 @@ Lists all AWS EC2 public IPs in all regions using all credentials in credentials
 _drips_ does the following:
 
 - Extract all profiles from your home credentials file
+  - `~/.aws/credentials` on macOS/Linux
+  - `%UserProfile%\.aws\credentials` on Windows
 - Find the activated regions for each profile
 - Query AWS in all regions for each profile simultaneously
 - Collect EC2 instances and check for a `Name` tag and public IP

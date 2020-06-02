@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use colored::*;
 use dirs_next::home_dir;
 use futures::stream::futures_unordered::FuturesUnordered;
@@ -38,7 +38,7 @@ struct InstanceMetadataCollection {
 async fn main() {
     // Create CLI system
     let matches = App::new("drips")
-        .version("0.1.0")
+        .version(crate_version!())
         .author("Noah Masur <noah.masur@take2games.com>")
         .about("Retrieves AWS EC2 IPs")
         .arg(
