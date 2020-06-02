@@ -1,10 +1,10 @@
-# drips: dammit, retrieve ips (from aws)
+# DRIPS: Dammit, Retrieve IPS (from AWS)
 
 Lists all AWS EC2 public IPs in all regions using all credentials in credentials file
 
 ## What?
 
-drips does the following:
+_drips_ does the following:
 
 - Extract all profiles from your home credentials file
 - Find the activated regions for each profile
@@ -19,7 +19,7 @@ I just need the IPs and I have too many accounts / too lazy to login.
 
 ## With?
 
-drips includes the following optional parameters:
+_drips_ includes the following optional parameters:
 
 - `--profile <PROFILE NAME>`: Filter to a specific profile name
 - `--region <REGION NAME>`: Filter to a specific region name

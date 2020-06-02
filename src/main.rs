@@ -121,7 +121,7 @@ async fn main() {
                         if !raw {
                             // First line is not a new line
                             if current_profile != "" {
-                                println!("");
+                                println!();
                             }
                             println!("[{}]", instances_collection.profile.green().bold());
                         }
@@ -179,7 +179,7 @@ async fn regional_clients(credential: NamedStaticProvider) -> Vec<RegionalClient
         };
     }
 
-    let clients = ec2_regions
+    ec2_regions
         .into_iter()
         .map(|ec2_region| {
             let region_name = match ec2_region.region_name {
@@ -207,9 +207,7 @@ async fn regional_clients(credential: NamedStaticProvider) -> Vec<RegionalClient
                 profile: credential.name.clone(),
             }
         })
-        .collect();
-
-    clients
+        .collect()
 }
 
 async fn regional_instances(
