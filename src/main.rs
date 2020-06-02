@@ -132,9 +132,10 @@ async fn main() {
                     }
                     let region = instances_collection.region.name();
                     if !raw {
-                        println!("--------------");
+                        let horiz: String = (0..&region.len() + 2).map(|_| '-').collect();
+                        println!("{}", &horiz);
                         println!("|{}|", region);
-                        println!("--------------");
+                        println!("{}", &horiz);
                     }
                     for instance in instances_collection.metadatas {
                         println!("{} - {}", instance.name, instance.ip,);
