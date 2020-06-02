@@ -14,6 +14,8 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use colored::*;
+
 // type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Clone)]
@@ -126,7 +128,7 @@ async fn main() {
                             if current_profile != "" {
                                 println!("");
                             }
-                            println!("[{}]", instances_collection.profile);
+                            println!("[{}]", instances_collection.profile.green().bold());
                         }
                         current_profile = instances_collection.profile;
                     }
@@ -134,7 +136,7 @@ async fn main() {
                     if !raw {
                         let horiz: String = (0..&region.len() + 2).map(|_| '-').collect();
                         println!("{}", &horiz);
-                        println!("|{}|", region);
+                        println!("|{}|", region.yellow());
                         println!("{}", &horiz);
                     }
                     for instance in instances_collection.metadatas {
@@ -143,7 +145,7 @@ async fn main() {
                 }
             }
             Err(error) => {
-                eprintln!("Error: {}", error);
+                eprintln!("Error: {}", error.red());
             }
         }
     }
