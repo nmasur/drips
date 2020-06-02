@@ -4,8 +4,8 @@ use futures::stream::StreamExt;
 use rusoto_core::{HttpClient, Region, RusotoError};
 use rusoto_credential::StaticProvider;
 use rusoto_ec2::{
-    DescribeInstancesError, DescribeInstancesRequest, DescribeInstancesResult, Ec2, Ec2Client,
-    Instance, Reservation,
+    DescribeInstancesError, DescribeInstancesRequest, DescribeInstancesResult,
+    DescribeRegionsRequest, Ec2, Ec2Client, Instance, Reservation,
 };
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -14,16 +14,29 @@ use std::path::PathBuf;
 struct InstanceMetadata {
     name: String,
     ip: String,
-    region: Region,
 }
 
 struct InstanceMetadataCollection {
     metadatas: Vec<InstanceMetadata>,
     profile: String,
+    region: rusoto_ec2::Region,
+}
+
+#[derive(Clone)]
+struct NamedStaticProvider {
+    name: String,
+    provider: StaticProvider,
+}
+
+struct ClientWithRegions {
+    client: Ec2Client,
+    profile: String,
+    regions: Vec<rusoto_ec2::Region>,
 }
 
 #[tokio::main]
 async fn main() {
+    // Retrieve credentials from file
     let creds_file_lines = read_credentials_file();
     let creds = match creds_file_lines {
         Ok(lines) => aws_creds_list(lines),
@@ -33,52 +46,50 @@ async fn main() {
         }
     };
 
-    let regions = vec![
-        Region::ApEast1,
-        Region::ApNortheast1,
-        Region::ApNortheast2,
-        Region::ApNortheast3,
-        Region::ApSouth1,
-        Region::ApSoutheast1,
-        Region::ApSoutheast2,
-        Region::CaCentral1,
-        Region::EuCentral1,
-        Region::EuWest1,
-        Region::EuWest2,
-        Region::EuWest3,
-        Region::EuNorth1,
-        Region::MeSouth1,
-        Region::SaEast1,
-        Region::UsEast1,
-        Region::UsEast2,
-        Region::UsWest1,
-        Region::UsWest2,
-        // Region::UsGovEast1,
-        // Region::UsGovWest1,
-        // Region::CnNorth1,
-        // Region::CnNorthwest1,
-    ];
-
-    let mut futs = FuturesUnordered::new();
+    // Request all the regions for an AWS account
+    let mut regions_futs = FuturesUnordered::new();
     for cred in creds {
-        for region in &regions {
-            futs.push(regional_instances(region.to_owned(), cred.clone()))
+        regions_futs.push(regions(cred));
+    }
+
+    // Process results of all regions, request all instances for each region in each account
+    let mut futs = FuturesUnordered::new();
+    while let Some(clients) = regions_futs.next().await {
+        for client in clients {
+            for region in client.regions {
+                futs.push(regional_instances(
+                    client.client.clone(),
+                    region,
+                    client.profile.clone(),
+                ));
+            }
         }
     }
 
+    // Print results
+    let mut current_profile = String::new();
     while let Some(instances_result) = futs.next().await {
-        if let Ok(instances_collection) = instances_result {
-            if instances_collection.metadatas.len() > 0 {
-                println!("\n[{}]", instances_collection.profile);
-                println!("--------------");
+        match instances_result {
+            Ok(instances_collection) => {
+                if instances_collection.metadatas.len() > 0 {
+                    if instances_collection.profile != current_profile {
+                        println!("\n[{}]", instances_collection.profile);
+                        current_profile = instances_collection.profile;
+                    }
+                    let region = match instances_collection.region.region_name {
+                        Some(region) => region,
+                        None => String::from("REGION UNKNOWN"),
+                    };
+                    println!("--------------");
+                    println!("|{}|", region);
+                    println!("--------------");
+                }
+                for instance in instances_collection.metadatas {
+                    println!("{} - {}", instance.name, instance.ip,);
+                }
             }
-            for instance in instances_collection.metadatas {
-                println!(
-                    "{} - {} ({})",
-                    instance.name,
-                    instance.ip,
-                    instance.region.name()
-                );
+            Err(error) => {
+                eprintln!("Error: {}", error);
             }
         }
     }
@@ -107,12 +118,6 @@ fn read_credentials_file() -> std::io::Result<Vec<String>> {
         .map(|line| line.unwrap_or_else(|_| String::from("")))
         .collect();
     Ok(lines)
-}
-
-#[derive(Clone)]
-struct NamedStaticProvider {
-    name: String,
-    provider: StaticProvider,
 }
 
 fn aws_creds_list(lines: Vec<String>) -> Vec<NamedStaticProvider> {
@@ -158,11 +163,14 @@ fn aws_creds_list(lines: Vec<String>) -> Vec<NamedStaticProvider> {
 
 fn instances_result(
     output: Result<DescribeInstancesResult, RusotoError<DescribeInstancesError>>,
-    region: &Region,
+    region: &rusoto_ec2::Region,
 ) -> Result<DescribeInstancesResult, String> {
     match output {
         Ok(result) => Ok(result),
-        Err(_) => Err(format!("Region failure in {}", &region.name())),
+        Err(error) => Err(format!(
+            "Region failure in {:?}: {}",
+            &region.region_name, error
+        )),
     }
 }
 
@@ -197,15 +205,39 @@ fn instance_name(instance: &Instance) -> Result<String, String> {
     }
 }
 
-async fn regional_instances(
-    region: Region,
-    credential: NamedStaticProvider,
-) -> Result<InstanceMetadataCollection, String> {
+async fn regions(credential: NamedStaticProvider) -> Result<ClientWithRegions, String> {
     let client = Ec2Client::new_with(
         HttpClient::new().unwrap(),
         credential.provider,
-        region.clone(),
+        Region::UsEast1,
     );
+
+    let regions_request = DescribeRegionsRequest {
+        all_regions: None,
+        dry_run: None,
+        filters: None,
+        region_names: None,
+    };
+
+    let result = client.describe_regions(regions_request).await;
+    match result {
+        Ok(regions_result) => match regions_result.regions {
+            Some(regions) => Ok(ClientWithRegions {
+                client,
+                regions,
+                profile: credential.name,
+            }),
+            None => Err(String::from("No regions found")),
+        },
+        Err(_) => Err(String::from("Error getting regions")),
+    }
+}
+
+async fn regional_instances(
+    client: Ec2Client,
+    region: rusoto_ec2::Region,
+    profile: String,
+) -> Result<InstanceMetadataCollection, String> {
     let describe_instances_input: DescribeInstancesRequest = DescribeInstancesRequest {
         dry_run: None,
         filters: None,
@@ -229,13 +261,17 @@ async fn regional_instances(
 
     let mut instance_metadatas = InstanceMetadataCollection {
         metadatas: Vec::new(),
-        profile: credential.name,
+        profile,
+        region,
     };
 
     for instance in total_instances {
         let ip_address = match &instance.public_ip_address {
             Some(ip_address) => ip_address,
-            None => "N/A",
+            None => match true {
+                true => continue,
+                false => "N/A",
+            },
         };
 
         let name = match instance_name(&instance) {
@@ -246,7 +282,6 @@ async fn regional_instances(
         instance_metadatas.metadatas.push(InstanceMetadata {
             name,
             ip: String::from(ip_address),
-            region: region.clone(),
         });
     }
 
