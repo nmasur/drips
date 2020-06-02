@@ -89,7 +89,7 @@ async fn main() {
     for cred in creds {
         // Or filter based on region argument
         if let Some(profile) = matches.value_of("profile") {
-            if &cred.name != profile {
+            if cred.name != profile {
                 continue;
             }
         }
@@ -115,7 +115,7 @@ async fn main() {
         match instances_result {
             Ok(instances_collection) => {
                 // Only start printing if at least 1 instance
-                if instances_collection.metadatas.len() > 0 {
+                if !instances_collection.metadatas.is_empty() {
                     // Print the profile name if first time seeing it (and not raw mode)
                     if instances_collection.profile != current_profile {
                         if !raw {
@@ -257,10 +257,13 @@ async fn regional_instances(
     for instance in total_instances {
         let ip_address = match &instance.public_ip_address {
             Some(ip_address) => ip_address,
-            None => match all {
-                true => "N/A",
-                false => continue,
-            },
+            None => {
+                if all {
+                    "N/A"
+                } else {
+                    continue;
+                }
+            }
         };
 
         let name = instance_name(&instance);
@@ -315,7 +318,7 @@ fn aws_creds_list(lines: Vec<String>) -> Vec<NamedStaticProvider> {
                     secret = Some(words.next().unwrap().trim().to_string());
                 }
                 other_word => {
-                    if other_word.starts_with("[") {
+                    if other_word.starts_with('[') {
                         profile = Some(other_word.replace("[", "").replace("]", ""));
                     }
                 }
