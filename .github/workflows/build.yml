@@ -92,6 +92,27 @@ jobs:
         with:
           command: clippy
           args: '-- -D warnings'
+  version:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: 'toml-cli'
+      - id: get_version
+        shell: bash
+        run: |
+          VERSION=$(toml get Cargo.toml package.version | tr -d '"')
+          echo ::set-output name=VERSION::$(echo $VERSION)
+      - run: echo "$VERSION" > ./version
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+      - uses: actions/upload-artifact@master
+        with:
+          name: version
+          path: ./version
   build:
     needs:
       - lints
@@ -133,18 +154,9 @@ jobs:
           toolchain: stable
           override: true
       - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: 'toml-cli'
-      - id: get_version
-        shell: bash
-        run: |
-          VERSION=$(toml get Cargo.toml package.version | tr -d '"')
-          echo ::set-output name=VERSION::$(echo $VERSION)
-      - uses: actions-rs/cargo@v1
-        env:
-          VERSION: '${{ steps.get_version.outputs.VERSION }}'
-          REPOSITORY_NAME: '${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}'
+        # env:
+        #   VERSION: '${{ steps.get_version.outputs.VERSION }}'
+        #   REPOSITORY_NAME: '${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}'
         with:
           command: build
           args: '--release'
@@ -156,6 +168,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     needs:
       - build
+      - version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
@@ -165,26 +178,27 @@ jobs:
       - uses: actions/download-artifact@master
         with:
           name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu
+          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu
       - uses: actions/download-artifact@master
         with:
           name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
+          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
       - uses: actions/download-artifact@master
         with:
           name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc
+          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
+      - uses: actions/download-artifact@master
         with:
-          command: install
-          args: 'toml-cli'
+          name: version
       - id: get_version
         shell: bash
         run: |
-          VERSION=$(toml get Cargo.toml package.version | tr -d '"')
-          echo ::set-output name=VERSION::$(echo $VERSION)
+          echo ::set-output "name=VERSION::$(cat ./version)"
       - name: Display structure of downloaded files
         run: ls -R
       - id: create_release
