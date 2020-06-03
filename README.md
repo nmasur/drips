@@ -31,3 +31,19 @@ _drips_ includes the following optional parameters:
 ## Where?
 
 See [releases](https://github.com/nmasur/drips/releases) page for binaries.
+
+On MacOS, you made need to modify file permissions and allow apps from anywhere:
+
+```
+chmod +x drips-x86_64-apple-darwin
+mv drips-x86_64-apple-darwin /usr/local/bin/drips
+sudo spctl --master-disable
+```
+
+Or install from source:
+
+```
+git clone git://github.com/nmasur/drips
+cd drips
+cargo build --release
+```
