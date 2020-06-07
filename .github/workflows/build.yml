@@ -254,7 +254,7 @@ jobs:
           formula-name: drips
           homebrew-tap: nmasur/homebrew-drips
           base-branch: master
-          download-url: https://github.com/{{ github.repository }}/releases/latest/download/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz
+          download-url: https://github.com/${{ github.repository }}/releases/latest/download/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz
           commit-message: {{FormulaName}} {{version}}
         env:
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
