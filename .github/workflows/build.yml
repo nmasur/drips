@@ -162,7 +162,7 @@ jobs:
           args: '--release'
       - shell: bash
         run: |
-          tar -czf ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}.tar.gz ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}
+          tar -czf ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}.tar.gz ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}
       - uses: actions/upload-artifact@master
         with:
           name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}.tar.gz
@@ -249,7 +249,6 @@ jobs:
         shell: bash
       - name: bump-homebrew-formula
         uses: mislav/bump-homebrew-formula-action@v1
-        if: "!contains(github.ref, '-')"
         with:
           formula-name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}
           homebrew-tap: ${{ github.repository_owner }}/homebrew-${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}
