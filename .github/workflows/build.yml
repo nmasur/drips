@@ -160,10 +160,13 @@ jobs:
         with:
           command: build
           args: '--release'
+      - shell: bash
+        run: |
+          tar -czf ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}.tar.gz ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}
       - uses: actions/upload-artifact@master
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}
-          path: ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}
+          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}.tar.gz
+          path: ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}.tar.gz
   release:
     if: github.ref == 'refs/heads/releases'
     needs:
@@ -177,16 +180,16 @@ jobs:
         shell: bash
       - uses: actions/download-artifact@master
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu
-          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu
+          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu.tar.gz
+          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu.tar.gz
       - uses: actions/download-artifact@master
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
-          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
+          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz
+          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz
       - uses: actions/download-artifact@master
         with:
-          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc
-          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc
+          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc.tar.gz
+          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc.tar.gz
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -202,7 +205,7 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R
       - id: create_release
-        uses: actions/create-release@v1.0.0
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         with:
@@ -210,27 +213,48 @@ jobs:
           release_name: 'Release ${{ steps.get_version.outputs.VERSION }}'
           draft: false
           prerelease: false
-      - uses: actions/upload-release-asset@v1.0.1
+      - uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         with:
           upload_url: '${{ steps.create_release.outputs.upload_url }}'
           asset_path: ./${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}
-          asset_name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu
-          asset_content_type: application/octet-stream
-      - uses: actions/upload-release-asset@v1.0.1
+          asset_name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-unknown-linux-gnu.tar.gz
+          # asset_content_type: application/octet-stream
+          asset_content_type: application/gzip
+      - uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         with:
           upload_url: '${{ steps.create_release.outputs.upload_url }}'
           asset_path: ./${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}
-          asset_name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
-          asset_content_type: application/octet-stream
-      - uses: actions/upload-release-asset@v1.0.1
+          asset_name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz
+          asset_content_type: application/gzip
+      - uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         with:
           upload_url: '${{ steps.create_release.outputs.upload_url }}'
           asset_path: ./${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}.exe
-          asset_name:  ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc.exe
-          asset_content_type: application/octet-stream
+          asset_name:  ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc.exe.tar.gz
+          asset_content_type: application/gzip
+  homebrew:
+    name: Bump Homebrew formula
+    needs:
+      - release
+    runs-on: ubuntu-latest
+    steps:
+      - id: get_repository_name
+        run: echo ::set-output name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
+        shell: bash
+      - name: bump-homebrew-formula
+        uses: mislav/bump-homebrew-formula-action@v1
+        if: "!contains(github.ref, '-')"
+        with:
+          formula-name: drips
+          homebrew-tap: nmasur/homebrew-drips
+          base-branch: master
+          download-url: https://github.com/{{ github.repository }}/releases/latest/download/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz
+          commit-message: {{FormulaName}} {{version}}
+        env:
+          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
