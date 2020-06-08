@@ -271,8 +271,8 @@ jobs:
           FILEPATH: ./${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}.tar.gz
       - name: commit new homebrew file
         run: |
-          git clone https://github.com/$OWNER/homebrew.git
-          cd homebrew/Formula
+          git clone https://github.com/$OWNER/homebrew-repo.git
+          cd homebrew-repo/Formula
           sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/" "$FORMULA"
           sed -i "s/version \".*\"/version \"$VERSION\"/" "$FORMULA"
           git config --local user.email "action@github.com"
@@ -287,6 +287,6 @@ jobs:
       - name: Push changes
         uses: ad-m/github-push-action@master
         with:
-          repository: ${{ github.repository_owner }}/homebrew
+          repository: ${{ github.repository_owner }}/homebrew-repo
           github_token: ${{ secrets.COMMITTER_TOKEN }}
-          directory: homebrew
+          directory: homebrew-repo
