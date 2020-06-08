@@ -9,11 +9,9 @@ _drips_ does the following:
 - Extract all profiles from your home credentials file
   - `~/.aws/credentials` on macOS/Linux
   - `%UserProfile%\.aws\credentials` on Windows
-- Find the activated regions for each profile
-- Query AWS in all regions for each profile simultaneously
-- Collect EC2 instances and check for a `Name` tag and public IP
+- Collect EC2 instances in all accounts and regions with a `Name` tag and public IP
   - Instances without a name tag are titled "N/A"
-- Return results asynchronously
+  - Data is requested and returned asynchronously
 
 ## Why?
 
@@ -32,15 +30,13 @@ _drips_ includes the following optional parameters:
 
 See [releases](https://github.com/nmasur/drips/releases) page for binaries.
 
-On MacOS, you made need to modify file permissions and allow apps from anywhere:
+On MacOS, you can also install from Homebrew:
 
 ```
-chmod +x drips-x86_64-apple-darwin
-mv drips-x86_64-apple-darwin /usr/local/bin/drips
-sudo spctl --master-disable
+brew install nmasur/homebrew/drips
 ```
 
-Or install from source:
+Alternatively, build from source using [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
 
 ```
 git clone git://github.com/nmasur/drips
