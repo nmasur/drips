@@ -273,8 +273,8 @@ jobs:
         run: |
           git clone https://github.com/$OWNER/homebrew.git
           cd homebrew/Formula
-          sed -i " " "s/sha256 \".*\"/sha256 \"$SHA\"/" "$FORMULA"
-          sed -i " " "s/version \".*\"/version \"$VERSION\"/" "$FORMULA"
+          sed -i "" "s/sha256 \".*\"/sha256 \"$SHA\"/" "$FORMULA"
+          sed -i "" "s/version \".*\"/version \"$VERSION\"/" "$FORMULA"
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add $FORMULA
