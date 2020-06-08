@@ -268,8 +268,6 @@ jobs:
         run: |
           SHA=$(shasum -a 256 $FILEPATH | awk '{print $1}')
           git clone https://github.com/$OWNER/homebrew.git
-          rm homebrew/Formula/$FORMULA
-          cp $FORMULA.rb homebrew/Formula/$FORMULA
           cd homebrew/Formula
           sed -i '' 's/sha256 ".*"/sha256 "$SHA"/' $FORMULA
           sed -i '' 's/version ".*"/version "$VERSION"/' $FORMULA
