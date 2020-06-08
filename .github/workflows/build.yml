@@ -2,7 +2,9 @@ on:
   push:
     branches:
       - '*'
-  pull_request: null
+  pull_request:
+    branches:
+      - master
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -93,7 +95,7 @@ jobs:
           command: clippy
           args: '-- -D warnings'
   version:
-    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/releases' }}
+    if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
@@ -114,6 +116,7 @@ jobs:
           name: version
           path: ./version
   build:
+    if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' }}
     needs:
       - lints
       - test
@@ -170,7 +173,7 @@ jobs:
           name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}
           path: ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}.tar.gz
   release:
-    if: github.ref == 'refs/heads/master'
+    if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' }}
     needs:
       - build
       - version
@@ -241,7 +244,7 @@ jobs:
           asset_name:  ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-pc-windows-msvc.exe.tar.gz
           asset_content_type: application/gzip
   homebrew:
-    name: Bump Homebrew formula
+    if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' }}
     needs:
       - release
     runs-on: ubuntu-latest
@@ -250,12 +253,12 @@ jobs:
         run: echo ::set-output name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
         shell: bash
       - name: bump-homebrew-formula
-        uses: mislav/bump-homebrew-formula-action@v1
+        uses: mislav/bump-homebrew-formula-action@master
         with:
           formula-name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}
           homebrew-tap: ${{ github.repository_owner }}/homebrew
-          # base-branch: master
-          # download-url: 'https://github.com/${{ github.repository }}/releases/latest/download/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz'
           commit-message: '{{FormulaName}} {{version}}'
+          base-branch: master
+          download-url: 'https://github.com/${{ github.repository }}/releases/latest/download/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz'
         env:
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
