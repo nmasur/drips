@@ -162,7 +162,9 @@ jobs:
           args: '--release'
       - shell: bash
         run: |
-          tar -czf ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}.tar.gz ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}
+          cd ./target/release
+          tar -czf ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}.tar.gz ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}
+          cd -
       - uses: actions/upload-artifact@master
         with:
           name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}.tar.gz
