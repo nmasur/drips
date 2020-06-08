@@ -246,19 +246,44 @@ jobs:
   homebrew:
     if: ${{ github.ref == 'refs/heads/master' && github.event_name == 'push' }}
     needs:
+      - version
       - release
     runs-on: ubuntu-latest
     steps:
       - id: get_repository_name
         run: echo ::set-output name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
         shell: bash
-      - name: bump-homebrew-formula
-        uses: mislav/bump-homebrew-formula-action@master
+      - uses: actions/download-artifact@master
         with:
-          formula-name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}
-          homebrew-tap: ${{ github.repository_owner }}/homebrew
-          commit-message: '{{FormulaName}} {{version}}'
-          base-branch: master
-          download-url: 'https://github.com/${{ github.repository }}/releases/latest/download/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin.tar.gz'
+          name: version
+      - id: get_version
+        shell: bash
+        run: |
+          echo ::set-output "name=VERSION::$(cat ./version)"
+      - uses: actions/download-artifact@master
+        with:
+          name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
+          path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
+      - name: commit new homebrew file
+        run: |
+          SHA=$(shasum -a 256 $FILEPATH | awk '{print $1}')
+          git clone https://github.com/$OWNER/homebrew.git
+          rm homebrew/Formula/$FORMULA
+          cp $FORMULA.rb homebrew/Formula/$FORMULA
+          cd homebrew/Formula
+          sed -i '' 's/sha256 ".*"/sha256 "$SHA"/' $FORMULA
+          sed -i '' 's/version ".*"/version "$VERSION"/' $FORMULA
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add $FORMULA
+          git commit -m "Version $VERSION"
         env:
-          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          FILEPATH: ./${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}.tar.gz 
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+          FORMULA: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}.rb
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          repository: ${{ github.repository_owner }}/homebrew
+          github_token: ${{ secrets.COMMITTER_TOKEN }}
