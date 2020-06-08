@@ -93,7 +93,7 @@ jobs:
           command: clippy
           args: '-- -D warnings'
   version:
-    if: github.ref == 'refs/heads/master'
+    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/releases' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
