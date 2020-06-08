@@ -170,7 +170,7 @@ jobs:
           name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-${{ matrix.target }}.tar.gz
           path: ./target/release/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}${{ matrix.suffix }}.tar.gz
   release:
-    if: github.ref == 'refs/heads/releases'
+    if: github.ref == 'refs/heads/master'
     needs:
       - build
       - version
