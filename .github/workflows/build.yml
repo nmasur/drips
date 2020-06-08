@@ -289,3 +289,4 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/homebrew
           github_token: ${{ secrets.COMMITTER_TOKEN }}
+          directory: homebrew
