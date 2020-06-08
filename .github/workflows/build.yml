@@ -264,20 +264,24 @@ jobs:
         with:
           name: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
           path: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin
+      - id: get_sha
+        run: |
+          echo ::set-output "name=SHA::$(shasum -a 256 $FILEPATH | awk '{print $1}')"
+        env:
+          FILEPATH: ./${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}.tar.gz
       - name: commit new homebrew file
         run: |
-          SHA=$(shasum -a 256 $FILEPATH | awk '{print $1}')
           git clone https://github.com/$OWNER/homebrew.git
           cd homebrew/Formula
-          sed -i '' 's/sha256 ".*"/sha256 "$SHA"/' $FORMULA
-          sed -i '' 's/version ".*"/version "$VERSION"/' $FORMULA
+          sed -i " " "s/sha256 \".*\"/sha256 \"$SHA\"/" "$FORMULA"
+          sed -i " " "s/version \".*\"/version \"$VERSION\"/" "$FORMULA"
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add $FORMULA
           git commit -m "Version $VERSION"
         env:
           OWNER: ${{ github.repository_owner }}
-          FILEPATH: ./${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}-x86_64-apple-darwin/${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}.tar.gz 
+          SHA: ${{ steps.get_sha.outputs.SHA }}
           VERSION: ${{ steps.get_version.outputs.VERSION }}
           FORMULA: ${{ steps.get_repository_name.outputs.REPOSITORY_NAME }}.rb
       - name: Push changes
