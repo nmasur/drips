@@ -33,7 +33,8 @@ See [releases](https://github.com/nmasur/drips/releases) page for binaries.
 On MacOS, you can also install from Homebrew:
 
 ```
-brew install nmasur/homebrew/drips
+brew tap nmasur/repo
+brew install nmasur/repo/drips
 ```
 
 Alternatively, build from source using [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
